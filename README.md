@@ -71,6 +71,17 @@ API 오류, 낮은 신뢰도, 잘못된 무효화 가격은 모두 `NO_TRADE`로
 API 예외 검증, Demo Trading은 지원되는 주문 API 통합 검증에만 사용합니다. 파일 기반 킬 스위치,
 JSONL 감사 로그, 일일 손익·승률·손익비 리포트를 제공합니다.
 
+로컬 페이퍼는 거래 API 키 없이 메인넷 공개 확정 캔들만 사용합니다.
+
+```bash
+pip install -e '.[bybit]'
+coin-trading-paper --initial-equity 10000 --state-dir data/paper
+```
+
+종료 후 같은 명령을 실행하면 `state.json`에서 자산·포지션·거래 기록을 복구하고 누락된 확정 캔들을
+먼저 처리합니다. `HALT` 파일이 생성된 경우 원인을 검토하고 명시적으로 해제하기 전에는 재진입하지
+않습니다.
+
 ## 브랜치 계획
 
 1. `codex/bootstrap-foundation`: 설정, 도메인 모델, 리스크 가드

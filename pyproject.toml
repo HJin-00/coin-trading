@@ -12,6 +12,7 @@ dependencies = []
 
 [project.scripts]
 coin-trading-download = "coin_trading.market_data.cli:main"
+coin-trading-paper = "coin_trading.operations.cli:main"
 
 [project.optional-dependencies]
 dev = [
