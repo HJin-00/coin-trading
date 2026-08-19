@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from coin_trading.domain import Side
 from coin_trading.execution.models import OrderIntent
@@ -64,6 +65,83 @@ class PaperBroker:
         self.trades: list[PaperTrade] = []
         self._day: int | None = None
         self._day_start_equity = initial_equity
+
+    @property
+    def daily_pnl(self) -> Decimal:
+        return self.equity - self._day_start_equity
+
+    def export_state(self) -> dict[str, Any]:
+        position = None
+        if self.position is not None:
+            position = {
+                "symbol": self.position.symbol,
+                "side": self.position.side.value,
+                "quantity": str(self.position.quantity),
+                "entry_price": str(self.position.entry_price),
+                "stop_price": str(self.position.stop_price),
+                "take_profit_price": str(self.position.take_profit_price),
+                "entry_time_ms": self.position.entry_time_ms,
+                "entry_fee": str(self.position.entry_fee),
+            }
+        trades = [
+            {
+                "symbol": trade.symbol,
+                "side": trade.side.value,
+                "entry_time_ms": trade.entry_time_ms,
+                "exit_time_ms": trade.exit_time_ms,
+                "entry_price": str(trade.entry_price),
+                "exit_price": str(trade.exit_price),
+                "quantity": str(trade.quantity),
+                "fees": str(trade.fees),
+                "net_pnl": str(trade.net_pnl),
+                "exit_reason": trade.exit_reason,
+            }
+            for trade in self.trades
+        ]
+        return {
+            "equity": str(self.equity),
+            "position": position,
+            "trades": trades,
+            "day": self._day,
+            "day_start_equity": str(self._day_start_equity),
+        }
+
+    def restore_state(self, payload: dict[str, Any]) -> None:
+        equity = Decimal(str(payload["equity"]))
+        if equity <= 0:
+            raise ValueError("restored equity must be positive")
+        self.equity = equity
+        position = payload.get("position")
+        self.position = None
+        if position is not None:
+            self.position = PaperPosition(
+                symbol=str(position["symbol"]),
+                side=Side(str(position["side"])),
+                quantity=Decimal(str(position["quantity"])),
+                entry_price=Decimal(str(position["entry_price"])),
+                stop_price=Decimal(str(position["stop_price"])),
+                take_profit_price=Decimal(str(position["take_profit_price"])),
+                entry_time_ms=int(position["entry_time_ms"]),
+                entry_fee=Decimal(str(position["entry_fee"])),
+            )
+        self.trades = [
+            PaperTrade(
+                symbol=str(trade["symbol"]),
+                side=Side(str(trade["side"])),
+                entry_time_ms=int(trade["entry_time_ms"]),
+                exit_time_ms=int(trade["exit_time_ms"]),
+                entry_price=Decimal(str(trade["entry_price"])),
+                exit_price=Decimal(str(trade["exit_price"])),
+                quantity=Decimal(str(trade["quantity"])),
+                fees=Decimal(str(trade["fees"])),
+                net_pnl=Decimal(str(trade["net_pnl"])),
+                exit_reason=str(trade["exit_reason"]),
+            )
+            for trade in payload.get("trades", [])
+        ]
+        day = payload.get("day")
+        self._day = None if day is None else int(day)
+        self._day_start_equity = Decimal(str(payload["day_start_equity"]))
 
     def submit(
         self,
