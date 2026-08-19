@@ -1,0 +1,4 @@
+"""Risk-first Bybit futures trading research package."""
+
+__version__ = "0.1.0"
+
