@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol, cast
 
 from coin_trading.domain import Side
+from coin_trading.execution.environment import ExecutionEnvironment
 from coin_trading.execution.models import (
     InstrumentRules,
     OrderIntent,
@@ -65,13 +66,19 @@ def _text(value: Decimal) -> str:
     return format(value, "f")
 
 
-class BybitTestnetExecutor:
-    """One-way USDT perpetual adapter that cannot be configured for mainnet."""
+class BybitExecutionAdapter:
+    """One-way USDT perpetual adapter restricted to non-live environments."""
 
-    def __init__(self, client: BybitTradingClient, *, testnet: bool) -> None:
-        if not testnet:
-            raise BybitExecutionError("this adapter is restricted to Bybit testnet")
+    def __init__(
+        self,
+        client: BybitTradingClient,
+        *,
+        environment: ExecutionEnvironment,
+    ) -> None:
+        if environment is ExecutionEnvironment.LOCAL_PAPER:
+            raise BybitExecutionError("local paper execution does not use a Bybit trading client")
         self.client = client
+        self.environment = environment
         self._recovery_completed = False
         self._trading_blocked = True
         self._rules: dict[str, InstrumentRules] = {}
@@ -128,15 +135,18 @@ class BybitTestnetExecutor:
                 reused_existing=True,
             )
 
-        leverage = _text(intent.leverage)
-        _result(
-            self.client.set_leverage(
-                category="linear",
-                symbol=symbol,
-                buyLeverage=leverage,
-                sellLeverage=leverage,
+        if self.environment is ExecutionEnvironment.DEMO and intent.leverage != 1:
+            raise BybitExecutionError("Demo Trading requires preconfigured 1x leverage")
+        if self.environment is ExecutionEnvironment.TESTNET:
+            leverage = _text(intent.leverage)
+            _result(
+                self.client.set_leverage(
+                    category="linear",
+                    symbol=symbol,
+                    buyLeverage=leverage,
+                    sellLeverage=leverage,
+                )
             )
-        )
         parameters: dict[str, Any] = {
             "category": "linear",
             "symbol": symbol,
@@ -246,3 +256,17 @@ class BybitTestnetExecutor:
         if not valid:
             raise BybitExecutionError("normalized protective prices cross the expected entry")
         return stop, target
+
+
+class BybitTestnetExecutor(BybitExecutionAdapter):
+    def __init__(self, client: BybitTradingClient, *, testnet: bool) -> None:
+        if not testnet:
+            raise BybitExecutionError("this adapter is restricted to Bybit testnet")
+        super().__init__(client, environment=ExecutionEnvironment.TESTNET)
+
+
+class BybitDemoExecutor(BybitExecutionAdapter):
+    """Mainnet Demo Trading adapter; the caller must use api-demo.bybit.com credentials."""
+
+    def __init__(self, client: BybitTradingClient) -> None:
+        super().__init__(client, environment=ExecutionEnvironment.DEMO)
